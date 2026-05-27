@@ -1,0 +1,1416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Department Wise Commission Updater</title>
+
+  <!-- SheetJS CDN for Excel read/write -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <!-- Google Fonts: Syne (display) + DM Mono (data/code feel) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ============================================================
+       CSS VARIABLES – change theme here
+    ============================================================ */
+    :root {
+      --bg:          #0b0f1a;
+      --surface:     #111827;
+      --surface-2:   #1a2235;
+      --border:      #1f2d42;
+      --accent:      #00d4a0;        /* teal-green primary */
+      --accent-dim:  rgba(0,212,160,.12);
+      --accent-glow: rgba(0,212,160,.35);
+      --warn:        #f59e0b;
+      --danger:      #ef4444;
+      --success:     #10b981;
+      --text:        #e2e8f0;
+      --text-muted:  #64748b;
+      --text-dim:    #94a3b8;
+      --radius:      12px;
+      --radius-sm:   8px;
+      --mono:        'DM Mono', monospace;
+      --sans:        'Syne', sans-serif;
+      --shadow:      0 4px 32px rgba(0,0,0,.45);
+    }
+
+    /* ============================================================
+       RESET & BASE
+    ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+      /* subtle grid pattern */
+      background-image:
+        linear-gradient(rgba(0,212,160,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,160,.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    /* ============================================================
+       HEADER
+    ============================================================ */
+    header {
+      position: relative;
+      padding: 2.5rem 2rem 2rem;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(0,212,160,.06) 0%, transparent 100%);
+      overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute;
+      top: -80px; left: 50%; transform: translateX(-50%);
+      width: 500px; height: 200px;
+      background: radial-gradient(ellipse, var(--accent-glow) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-radius: 999px;
+      padding: .3rem .9rem;
+      font-family: var(--mono);
+      font-size: .72rem;
+      color: var(--accent);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+    .logo-badge span.dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: .5; transform: scale(1.4); }
+    }
+    h1 {
+      font-size: clamp(1.6rem, 4vw, 2.6rem);
+      font-weight: 800;
+      letter-spacing: -.02em;
+      line-height: 1.1;
+      color: #fff;
+    }
+    h1 em {
+      font-style: normal;
+      color: var(--accent);
+    }
+    header p {
+      margin-top: .6rem;
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: .82rem;
+      letter-spacing: .03em;
+    }
+
+    /* ============================================================
+       LAYOUT
+    ============================================================ */
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.8rem;
+    }
+
+    /* ============================================================
+       STEP CARDS
+    ============================================================ */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.8rem;
+      position: relative;
+      transition: border-color .25s;
+    }
+    .card:hover { border-color: rgba(0,212,160,.3); }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.4rem;
+    }
+    .step-num {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      border: 1.5px solid var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--mono);
+      font-size: .85rem;
+      font-weight: 500;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+    .card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -.01em;
+    }
+    .card-subtitle {
+      font-family: var(--mono);
+      font-size: .72rem;
+      color: var(--text-muted);
+      margin-top: .15rem;
+    }
+
+    /* ============================================================
+       FILE UPLOAD ZONE
+    ============================================================ */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all .2s;
+      position: relative;
+      background: transparent;
+    }
+    .upload-zone:hover,
+    .upload-zone.dragover {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+    .upload-zone input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .upload-icon {
+      font-size: 2.5rem;
+      margin-bottom: .8rem;
+      display: block;
+    }
+    .upload-zone p {
+      color: var(--text-dim);
+      font-size: .9rem;
+    }
+    .upload-zone strong {
+      color: var(--accent);
+    }
+    .file-badge {
+      display: none;
+      align-items: center;
+      gap: .6rem;
+      background: var(--surface-2);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-sm);
+      padding: .6rem 1rem;
+      margin-top: 1.1rem;
+      font-family: var(--mono);
+      font-size: .8rem;
+      color: var(--accent);
+    }
+    .file-badge.visible { display: inline-flex; }
+    .file-badge .remove-file {
+      margin-left: auto;
+      cursor: pointer;
+      color: var(--danger);
+      font-weight: bold;
+      background: none; border: none; font-size: 1rem;
+      line-height: 1;
+    }
+
+    /* ============================================================
+       COLUMN DETECTION PREVIEW
+    ============================================================ */
+    #colPreview {
+      display: none;
+      margin-top: 1rem;
+    }
+    #colPreview.visible { display: block; }
+    .detected-cols {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem;
+      margin-top: .6rem;
+    }
+    .col-tag {
+      font-family: var(--mono);
+      font-size: .72rem;
+      padding: .25rem .65rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+    .col-tag.found { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+    .col-tag.missing { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,.1); }
+    .col-tag.warn { border-color: var(--warn); color: var(--warn); background: rgba(245,158,11,.1); }
+
+    /* ============================================================
+       DEPARTMENT RULES
+    ============================================================ */
+    .rules-grid {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto;
+      gap: .7rem;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .rules-grid label {
+      font-family: var(--mono);
+      font-size: .7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding-left: .3rem;
+    }
+    .rule-rows { display: flex; flex-direction: column; gap: .7rem; }
+    .rule-row {
+      display: grid;
+      grid-template-columns: 1fr 100px 38px;
+      gap: .6rem;
+      align-items: center;
+    }
+    input[type="text"],
+    input[type="number"] {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: .6rem .85rem;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: .85rem;
+      width: 100%;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    input[type="text"]:focus,
+    input[type="number"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+    input::placeholder { color: var(--text-muted); }
+
+    .btn-icon {
+      width: 38px; height: 38px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface-2);
+      color: var(--danger);
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .2s;
+      flex-shrink: 0;
+    }
+    .btn-icon:hover { border-color: var(--danger); background: rgba(239,68,68,.12); }
+
+    .btn-add {
+      display: flex;
+      align-items: center;
+      gap: .45rem;
+      font-family: var(--mono);
+      font-size: .78rem;
+      color: var(--accent);
+      background: none;
+      border: 1px dashed var(--accent);
+      border-radius: var(--radius-sm);
+      padding: .55rem 1rem;
+      cursor: pointer;
+      margin-top: .4rem;
+      transition: all .2s;
+      width: fit-content;
+    }
+    .btn-add:hover { background: var(--accent-dim); }
+
+    /* preset chips */
+    .preset-label {
+      font-family: var(--mono);
+      font-size: .7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: .5rem;
+      display: block;
+    }
+    .presets { display: flex; flex-wrap: wrap; gap: .45rem; margin-bottom: 1rem; }
+    .preset-chip {
+      font-family: var(--mono);
+      font-size: .72rem;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: .3rem .8rem;
+      cursor: pointer;
+      background: var(--surface-2);
+      color: var(--text-dim);
+      transition: all .2s;
+    }
+    .preset-chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+    /* ============================================================
+       MODE SELECTOR (Commission % vs Commission Price)
+    ============================================================ */
+    .mode-toggle {
+      display: flex;
+      gap: .6rem;
+      margin-bottom: 1.2rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: .3rem;
+    }
+    .mode-btn {
+      flex: 1;
+      padding: .55rem .8rem;
+      border-radius: 6px;
+      border: none;
+      background: none;
+      font-family: var(--mono);
+      font-size: .78rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all .2s;
+      text-align: center;
+    }
+    .mode-btn.active {
+      background: var(--accent);
+      color: #000;
+      font-weight: 500;
+    }
+
+    /* ============================================================
+       ACTION BUTTONS
+    ============================================================ */
+    .action-row {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .btn-primary {
+      flex: 1;
+      min-width: 180px;
+      padding: .85rem 1.5rem;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: var(--accent);
+      color: #000;
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: .9rem;
+      letter-spacing: -.01em;
+      cursor: pointer;
+      transition: all .2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .55rem;
+    }
+    .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 6px 20px var(--accent-glow); }
+    .btn-primary:active { transform: none; filter: none; }
+    .btn-primary:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    .btn-download {
+      flex: 1;
+      min-width: 180px;
+      padding: .85rem 1.5rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--accent);
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: .9rem;
+      letter-spacing: -.01em;
+      cursor: pointer;
+      transition: all .2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .55rem;
+    }
+    .btn-download:hover { background: var(--accent); color: #000; }
+    .btn-download:disabled { opacity: .3; cursor: not-allowed; }
+
+    /* ============================================================
+       ALERTS / MESSAGES
+    ============================================================ */
+    .alert {
+      padding: .9rem 1.1rem;
+      border-radius: var(--radius-sm);
+      font-family: var(--mono);
+      font-size: .8rem;
+      display: none;
+      align-items: flex-start;
+      gap: .7rem;
+      line-height: 1.6;
+      margin-top: 1rem;
+    }
+    .alert.visible { display: flex; }
+    .alert-success {
+      background: rgba(16,185,129,.12);
+      border: 1px solid var(--success);
+      color: var(--success);
+    }
+    .alert-error {
+      background: rgba(239,68,68,.12);
+      border: 1px solid var(--danger);
+      color: var(--danger);
+    }
+    .alert-warn {
+      background: rgba(245,158,11,.12);
+      border: 1px solid var(--warn);
+      color: var(--warn);
+    }
+    .alert-icon { font-size: 1.1rem; flex-shrink: 0; }
+
+    /* ============================================================
+       STATS BAR
+    ============================================================ */
+    #statsBar {
+      display: none;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: .8rem;
+      margin-top: 1.2rem;
+    }
+    #statsBar.visible { display: grid; }
+    .stat-box {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: .9rem 1rem;
+      text-align: center;
+    }
+    .stat-box .stat-num {
+      font-family: var(--mono);
+      font-size: 1.6rem;
+      font-weight: 500;
+      color: var(--accent);
+      line-height: 1;
+    }
+    .stat-box .stat-label {
+      font-family: var(--mono);
+      font-size: .68rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-top: .35rem;
+    }
+
+    /* ============================================================
+       PROGRESS BAR
+    ============================================================ */
+    .progress-wrap {
+      display: none;
+      margin-top: 1rem;
+    }
+    .progress-wrap.visible { display: block; }
+    .progress-label {
+      font-family: var(--mono);
+      font-size: .72rem;
+      color: var(--text-muted);
+      margin-bottom: .4rem;
+    }
+    .progress-bar-bg {
+      height: 4px;
+      background: var(--surface-2);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 999px;
+      width: 0%;
+      transition: width .3s ease;
+    }
+
+    /* ============================================================
+       LOG / SUMMARY TABLE
+    ============================================================ */
+    #logSection {
+      display: none;
+    }
+    #logSection.visible { display: block; }
+    .log-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      margin-top: .8rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--mono);
+      font-size: .76rem;
+    }
+    thead th {
+      background: var(--surface-2);
+      padding: .6rem .9rem;
+      text-align: left;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      font-size: .68rem;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody td {
+      padding: .55rem .9rem;
+      border-bottom: 1px solid rgba(31,45,66,.5);
+      color: var(--text-dim);
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: var(--surface-2); }
+    .td-dept { color: var(--warn); }
+    .td-price { color: var(--text); }
+    .td-calc { color: var(--accent); font-weight: 500; }
+    .td-mode { color: var(--text-muted); }
+
+    /* ============================================================
+       FOOTER
+    ============================================================ */
+    footer {
+      text-align: center;
+      padding: 2rem 1rem;
+      border-top: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: .72rem;
+      color: var(--text-muted);
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+
+    /* ============================================================
+       RESPONSIVE
+    ============================================================ */
+    @media (max-width: 600px) {
+      .rule-row { grid-template-columns: 1fr 80px 34px; }
+      .action-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ================================================================
+     HEADER
+================================================================ -->
+<header>
+  <div class="logo-badge"><span class="dot"></span> Excel Automation Tool</div>
+  <h1>Department Wise<br><em>Commission Updater</em></h1>
+  <p>Upload → Set Rules → Download Updated Excel Instantly</p>
+</header>
+
+<!-- ================================================================
+     MAIN
+================================================================ -->
+<main>
+
+  <!-- ─── STEP 1: Upload Excel ─────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <div class="step-num">01</div>
+      <div>
+        <div class="card-title">Upload Excel File</div>
+        <div class="card-subtitle">Accepted formats: .xlsx / .xls</div>
+      </div>
+    </div>
+
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="fileInput" accept=".xlsx,.xls" />
+      <span class="upload-icon">📊</span>
+      <p>Drag & drop your Excel file here<br>or <strong>click to browse</strong></p>
+    </div>
+
+    <!-- File badge shown after selection -->
+    <div class="file-badge" id="fileBadge">
+      <span>📄</span>
+      <span id="fileNameDisplay"></span>
+      <button class="remove-file" id="removeFile" title="Remove file">✕</button>
+    </div>
+
+    <!-- Column detection preview -->
+    <div id="colPreview">
+      <span style="font-family:var(--mono);font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;">
+        Detected Columns
+      </span>
+      <div class="detected-cols" id="detectedCols"></div>
+    </div>
+
+    <div class="alert alert-error" id="uploadError">
+      <span class="alert-icon">⛔</span>
+      <span id="uploadErrorMsg"></span>
+    </div>
+  </div>
+
+  <!-- ─── STEP 2: Commission Mode ──────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <div class="step-num">02</div>
+      <div>
+        <div class="card-title">Commission Input Mode</div>
+        <div class="card-subtitle">Choose how you will define commission per department</div>
+      </div>
+    </div>
+
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="modePercent" onclick="setMode('percent')">
+        📊 I'll enter Commission % — auto-calculate Commission Price
+      </button>
+      <button class="mode-btn" id="modePrice" onclick="setMode('price')">
+        💰 I'll enter Commission Price — auto-calculate Commission %
+      </button>
+    </div>
+
+    <div class="alert alert-warn" style="display:flex;">
+      <span class="alert-icon">ℹ️</span>
+      <span id="modeHint">
+        <strong>Case 1 active:</strong> Enter a commission % per department.
+        The app will compute <em>Commission Price = (Bill Price × %) / 100</em>.
+      </span>
+    </div>
+  </div>
+
+  <!-- ─── STEP 3: Department Rules ─────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <div class="step-num">03</div>
+      <div>
+        <div class="card-title">Department Commission Rules</div>
+        <div class="card-subtitle">Add one rule per department (case-insensitive, spaces trimmed)</div>
+      </div>
+    </div>
+
+    <!-- Quick preset chips -->
+    <span class="preset-label">Quick presets (click to add)</span>
+    <div class="presets" id="presets">
+      <button class="preset-chip" onclick="addPreset('HAEMATOLOGY')">HAEMATOLOGY</button>
+      <button class="preset-chip" onclick="addPreset('BIOCHEMISTRY')">BIOCHEMISTRY</button>
+      <button class="preset-chip" onclick="addPreset('SEROLOGY &amp; IMMUNOLOGY')">SEROLOGY &amp; IMMUNOLOGY</button>
+      <button class="preset-chip" onclick="addPreset('SPECIAL TEST')">SPECIAL TEST</button>
+      <button class="preset-chip" onclick="addPreset('MICROBIOLOGY')">MICROBIOLOGY</button>
+      <button class="preset-chip" onclick="addPreset('PATHOLOGY')">PATHOLOGY</button>
+      <button class="preset-chip" onclick="addPreset('RADIOLOGY')">RADIOLOGY</button>
+    </div>
+
+    <!-- Column headers for rule rows -->
+    <div style="display:grid;grid-template-columns:1fr 100px 38px;gap:.6rem;padding:0 0 .35rem;font-family:var(--mono);font-size:.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;">
+      <span style="padding-left:.3rem">Department Name</span>
+      <span id="ruleColHeader">Commission %</span>
+      <span></span>
+    </div>
+
+    <!-- Dynamic rule rows injected here -->
+    <div class="rule-rows" id="ruleRows"></div>
+
+    <button class="btn-add" onclick="addRuleRow()">
+      <span>＋</span> Add Department Rule
+    </button>
+
+    <div class="alert alert-error" id="rulesError">
+      <span class="alert-icon">⛔</span>
+      <span id="rulesErrorMsg"></span>
+    </div>
+  </div>
+
+  <!-- ─── STEP 4: Process ───────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <div class="step-num">04</div>
+      <div>
+        <div class="card-title">Process & Download</div>
+        <div class="card-subtitle">Apply rules and export updated Excel file</div>
+      </div>
+    </div>
+
+    <div class="action-row">
+      <button class="btn-primary" id="processBtn" onclick="processFile()">
+        ⚙️ Apply Commission Rules
+      </button>
+      <button class="btn-download" id="downloadBtn" onclick="downloadFile()" disabled>
+        ⬇️ Download Updated File
+      </button>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-label" id="progressLabel">Processing rows…</div>
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+    </div>
+
+    <!-- Success/error messages -->
+    <div class="alert alert-success" id="successMsg">
+      <span class="alert-icon">✅</span>
+      <span id="successText"></span>
+    </div>
+    <div class="alert alert-error" id="processError">
+      <span class="alert-icon">⛔</span>
+      <span id="processErrorMsg"></span>
+    </div>
+
+    <!-- Stats after processing -->
+    <div id="statsBar">
+      <div class="stat-box">
+        <div class="stat-num" id="statTotal">0</div>
+        <div class="stat-label">Total Rows</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="statUpdated">0</div>
+        <div class="stat-label">Rows Updated</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="statSkipped">0</div>
+        <div class="stat-label">Rows Skipped</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="statDepts">0</div>
+        <div class="stat-label">Depts Matched</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── STEP 5: Calculation Log ──────────────────────────────── -->
+  <div class="card" id="logSection">
+    <div class="card-header">
+      <div class="step-num">05</div>
+      <div>
+        <div class="card-title">Calculation Log</div>
+        <div class="card-subtitle">Preview of all updated rows (first 100 shown)</div>
+      </div>
+    </div>
+    <div class="log-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Test Name</th>
+            <th>Department</th>
+            <th>Bill Price</th>
+            <th>Commission Price</th>
+            <th>Commission %</th>
+            <th>Mode</th>
+          </tr>
+        </thead>
+        <tbody id="logBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<!-- ================================================================
+     FOOTER
+================================================================ -->
+<footer>
+  Department Wise Commission Updater &nbsp;·&nbsp;
+  Built with <a href="https://sheetjs.com" target="_blank">SheetJS</a> &nbsp;·&nbsp;
+  No data leaves your browser
+</footer>
+
+<!-- ================================================================
+     JAVASCRIPT
+================================================================ -->
+<script>
+/* ================================================================
+   STATE
+================================================================ */
+let uploadedWorkbook  = null;   // raw parsed workbook from SheetJS
+let processedWorkbook = null;   // modified workbook ready for download
+let currentMode       = 'percent'; // 'percent' | 'price'
+let ruleCounter       = 0;
+
+/* ================================================================
+   COLUMN NAME ALIASES  (normalised lower-case → canonical key)
+
+   HOW NORMALISATION WORKS BEFORE THIS LOOKUP:
+   normaliseHeader() strips parenthesised suffixes like (₹), ($), (%)
+   so "Commission Price(₹)" → "commission price" → matches below.
+   Add new base-form aliases here; the stripping handles variants.
+================================================================ */
+const COL_ALIASES = {
+  // ── Bill / Test price ────────────────────────────────────────
+  'bill price'       : 'billPrice',
+  'billprice'        : 'billPrice',
+  'test price'       : 'billPrice',
+  'testprice'        : 'billPrice',
+  'price'            : 'billPrice',
+  'mrp'              : 'billPrice',
+  'rate'             : 'billPrice',
+
+  // ── Commission price ─────────────────────────────────────────
+  // Base forms (parenthesised variants like (₹), ($), (rs) are
+  // stripped automatically by normaliseHeader before lookup).
+  'commission price'           : 'commissionPrice',
+  'commissionprice'            : 'commissionPrice',
+  'commission amount'          : 'commissionPrice',
+  'commissionamount'           : 'commissionPrice',
+  'comm price'                 : 'commissionPrice',
+  'comm. price'                : 'commissionPrice',
+  // Explicit safety aliases for known real-world variants
+  'commission price(₹)'        : 'commissionPrice',   // ← NEW
+  'commission price (₹)'       : 'commissionPrice',   // ← NEW (with space)
+  'commission price(rs)'       : 'commissionPrice',   // ← NEW
+  'commission price(rs.)'      : 'commissionPrice',   // ← NEW
+  'commission price($)'        : 'commissionPrice',   // future-proof
+  'commission price(inr)'      : 'commissionPrice',   // future-proof
+
+  // ── Commission percentage ─────────────────────────────────────
+  'commission percentage(%)'   : 'commissionPct',
+  'commission percentage (%)'  : 'commissionPct',
+  'commission percentage'      : 'commissionPct',
+  'commissionpercentage'       : 'commissionPct',
+  'commission %'               : 'commissionPct',
+  'commission%'                : 'commissionPct',
+  'commission pct'             : 'commissionPct',
+  'comm %'                     : 'commissionPct',
+  'comm. %'                    : 'commissionPct',
+
+  // ── Department ────────────────────────────────────────────────
+  'department'  : 'department',
+  'dept'        : 'department',
+  'dept.'       : 'department',
+  'department name' : 'department',
+
+  // ── Test / item name ─────────────────────────────────────────
+  'test name'   : 'testName',
+  'testname'    : 'testName',
+  'name'        : 'testName',
+  'item name'   : 'testName',
+  'description' : 'testName',
+};
+
+/**
+ * normaliseHeader()
+ * -----------------
+ * Converts a raw Excel header into a canonical lower-case string
+ * that can be looked up in COL_ALIASES.
+ *
+ * Steps applied (in order):
+ *  1. Coerce to string and trim edge whitespace
+ *  2. Remove any parenthesised block, e.g. (₹), (%), ($), (Rs.)
+ *     This handles "Commission Price(₹)" → "Commission Price"
+ *  3. Strip stray currency symbols that appear without parentheses
+ *     e.g. "Commission Price ₹" → "Commission Price"
+ *  4. Lowercase
+ *  5. Collapse multiple spaces into one and trim again
+ */
+function normaliseHeader(h) {
+  return String(h || '')
+    .trim()
+    // Step 2 — strip parenthesised suffixes/infixes: (₹), (%), (Rs.), ($) …
+    .replace(/\([^)]*\)/g, '')
+    // Step 3 — strip bare currency / special symbols outside parens
+    .replace(/[₹$€£¥]/g, '')
+    // Step 4 — lowercase
+    .toLowerCase()
+    // Step 5 — normalise whitespace
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/* ================================================================
+   MODE SWITCHER
+================================================================ */
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('modePercent').classList.toggle('active', mode === 'percent');
+  document.getElementById('modePrice').classList.toggle('active', mode === 'price');
+
+  const hint = document.getElementById('modeHint');
+  const colH  = document.getElementById('ruleColHeader');
+
+  if (mode === 'percent') {
+    hint.innerHTML = '<strong>Case 1 active:</strong> Enter a commission % per department. '
+      + 'The app will compute <em>Commission Price = (Bill Price × %) / 100</em>.';
+    colH.textContent = 'Commission %';
+    // update placeholder text in existing rows
+    document.querySelectorAll('.rule-value-input').forEach(inp => {
+      inp.placeholder = 'e.g. 25';
+      inp.title = 'Commission percentage (0-100)';
+    });
+  } else {
+    hint.innerHTML = '<strong>Case 2 active:</strong> Enter a fixed commission price per department. '
+      + 'The app will compute <em>Commission % = (Commission Price / Bill Price) × 100</em>.';
+    colH.textContent = 'Commission Price';
+    document.querySelectorAll('.rule-value-input').forEach(inp => {
+      inp.placeholder = 'e.g. 50';
+      inp.title = 'Fixed commission price amount';
+    });
+  }
+}
+
+/* ================================================================
+   RULE ROWS – add / remove
+================================================================ */
+function addRuleRow(deptName = '', value = '') {
+  const id  = ++ruleCounter;
+  const row = document.createElement('div');
+  row.className = 'rule-row';
+  row.id = `rule-${id}`;
+  row.innerHTML = `
+    <input type="text"   class="rule-dept-input"  placeholder="Department name" value="${escHtml(deptName)}" />
+    <input type="number" class="rule-value-input" placeholder="${currentMode === 'percent' ? 'e.g. 25' : 'e.g. 50'}"
+           min="0" step="0.01" value="${value}" />
+    <button class="btn-icon" onclick="removeRuleRow(${id})" title="Remove">✕</button>
+  `;
+  document.getElementById('ruleRows').appendChild(row);
+}
+
+function removeRuleRow(id) {
+  const el = document.getElementById(`rule-${id}`);
+  if (el) el.remove();
+}
+
+function addPreset(name) {
+  // Check if dept already exists
+  const existing = Array.from(document.querySelectorAll('.rule-dept-input'))
+    .find(i => i.value.trim().toLowerCase() === name.toLowerCase());
+  if (existing) { existing.focus(); return; }
+  addRuleRow(name);
+}
+
+/* Escape HTML special chars for safe attribute injection */
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+}
+
+/* Parse all rule rows → Map<normalised-dept, value-number> */
+function parseRules() {
+  const rules = new Map();
+  const errors = [];
+
+  document.querySelectorAll('.rule-row').forEach(row => {
+    const deptInput  = row.querySelector('.rule-dept-input');
+    const valueInput = row.querySelector('.rule-value-input');
+    const dept  = (deptInput.value  || '').trim();
+    const value = parseFloat(valueInput.value);
+
+    if (!dept && !valueInput.value) return; // blank row – skip silently
+
+    if (!dept) { errors.push('One or more department names are blank.'); return; }
+    if (isNaN(value)) { errors.push(`Missing value for department: "${dept}".`); return; }
+    if (value < 0)    { errors.push(`Negative value for department: "${dept}".`); return; }
+    if (currentMode === 'percent' && value > 100) {
+      errors.push(`Commission % for "${dept}" exceeds 100%.`); return;
+    }
+
+    rules.set(dept.toLowerCase(), { dept, value });
+  });
+
+  return { rules, errors };
+}
+
+/* ================================================================
+   FILE UPLOAD HANDLING
+================================================================ */
+const uploadZone  = document.getElementById('uploadZone');
+const fileInput   = document.getElementById('fileInput');
+const fileBadge   = document.getElementById('fileBadge');
+const fileNameEl  = document.getElementById('fileNameDisplay');
+
+// Drag & drop
+uploadZone.addEventListener('dragover',  e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) handleFile(fileInput.files[0]);
+});
+
+document.getElementById('removeFile').addEventListener('click', resetFile);
+
+function handleFile(file) {
+  // Validate extension
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (!['xlsx', 'xls'].includes(ext)) {
+    showUploadError('Invalid file type. Please upload an .xlsx or .xls file.');
+    return;
+  }
+
+  clearUploadError();
+  fileNameEl.textContent = file.name;
+  fileBadge.classList.add('visible');
+
+  // Parse workbook
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      uploadedWorkbook = XLSX.read(e.target.result, { type: 'binary', cellStyles: true });
+      processedWorkbook = null;
+      document.getElementById('downloadBtn').disabled = true;
+      hideSuccess();
+      detectColumns();
+    } catch (err) {
+      showUploadError('Failed to parse Excel file: ' + err.message);
+      uploadedWorkbook = null;
+    }
+  };
+  reader.readAsBinaryString(file);
+}
+
+function resetFile() {
+  uploadedWorkbook  = null;
+  processedWorkbook = null;
+  fileInput.value   = '';
+  fileBadge.classList.remove('visible');
+  fileNameEl.textContent = '';
+  document.getElementById('colPreview').classList.remove('visible');
+  document.getElementById('detectedCols').innerHTML = '';
+  document.getElementById('downloadBtn').disabled = true;
+  clearUploadError();
+  hideSuccess();
+  document.getElementById('statsBar').classList.remove('visible');
+  document.getElementById('logSection').classList.remove('visible');
+}
+
+/* ================================================================
+   COLUMN DETECTION PREVIEW
+================================================================ */
+function detectColumns() {
+  if (!uploadedWorkbook) return;
+
+  const ws   = uploadedWorkbook.Sheets[uploadedWorkbook.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  if (!json.length) { showUploadError('The Excel file appears to be empty.'); return; }
+
+  const headers = json[0].map(h => String(h).trim());
+  const required = ['billPrice', 'commissionPrice', 'commissionPct', 'department'];
+  const friendly = { billPrice:'Bill/Test Price', commissionPrice:'Commission Price',
+                     commissionPct:'Commission %', department:'Department' };
+
+  // Map detected headers
+  const found = new Set();
+  headers.forEach(h => {
+    const key = COL_ALIASES[normaliseHeader(h)];
+    if (key) found.add(key);
+  });
+
+  const colContainer = document.getElementById('detectedCols');
+  colContainer.innerHTML = '';
+
+  required.forEach(col => {
+    const tag = document.createElement('span');
+    tag.className = 'col-tag ' + (found.has(col) ? 'found' : 'missing');
+    tag.textContent = (found.has(col) ? '✓ ' : '✗ ') + friendly[col];
+    colContainer.appendChild(tag);
+  });
+
+  // Show any extra recognised columns
+  headers.forEach(h => {
+    const key = COL_ALIASES[normaliseHeader(h)];
+    if (key && !required.includes(key)) {
+      const tag = document.createElement('span');
+      tag.className = 'col-tag found';
+      tag.textContent = '✓ ' + h;
+      colContainer.appendChild(tag);
+    } else if (!key) {
+      const tag = document.createElement('span');
+      tag.className = 'col-tag';
+      tag.textContent = h || '(blank)';
+      colContainer.appendChild(tag);
+    }
+  });
+
+  document.getElementById('colPreview').classList.add('visible');
+
+  // Warn if critical columns missing
+  const missing = required.filter(c => !found.has(c));
+  if (missing.length) {
+    const missingNames = missing.map(c => friendly[c]).join(', ');
+    showUploadError(`Could not detect required columns: ${missingNames}. `
+      + `Check column headers in your Excel file.`);
+  }
+}
+
+/* ================================================================
+   MAIN PROCESSING FUNCTION
+================================================================ */
+async function processFile() {
+  hideSuccess();
+  hideProcessError();
+
+  // ── Validate: file uploaded
+  if (!uploadedWorkbook) {
+    showProcessError('Please upload an Excel file first (Step 1).');
+    return;
+  }
+
+  // ── Validate: rules
+  const { rules, errors } = parseRules();
+  if (errors.length) {
+    showProcessError(errors.join('<br>'));
+    return;
+  }
+  if (rules.size === 0) {
+    showProcessError('Please add at least one department commission rule (Step 3).');
+    return;
+  }
+
+  // ── Disable button during processing
+  const btn = document.getElementById('processBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Processing…';
+
+  // ── Deep-clone workbook so original stays intact
+  const wbBytes  = XLSX.write(uploadedWorkbook, { type: 'binary', bookType: 'xlsx' });
+  const workbook = XLSX.read(wbBytes, { type: 'binary', cellStyles: true });
+
+  // ── Process first sheet
+  const sheetName = workbook.SheetNames[0];
+  const ws        = workbook.Sheets[sheetName];
+
+  // Convert to array-of-arrays (keeps cell addresses for update)
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+  if (aoa.length < 2) {
+    showProcessError('Excel file has no data rows (only headers or empty).');
+    btn.disabled = false; btn.textContent = '⚙️ Apply Commission Rules';
+    return;
+  }
+
+  // ── Map header names → column indices
+  const headerRow = aoa[0].map((h, i) => ({ raw: String(h).trim(), idx: i }));
+  const colIdx    = {};  // canonical key → col index
+
+  headerRow.forEach(({ raw, idx }) => {
+    const key = COL_ALIASES[normaliseHeader(raw)];
+    if (key && colIdx[key] === undefined) colIdx[key] = idx;
+  });
+
+  // ── Check required columns exist
+  const needed = ['billPrice', 'commissionPrice', 'commissionPct', 'department'];
+  const notFound = needed.filter(k => colIdx[k] === undefined);
+  if (notFound.length) {
+    const friendly = { billPrice:'Bill/Test Price', commissionPrice:'Commission Price',
+                       commissionPct:'Commission %', department:'Department' };
+    showProcessError('Missing columns: ' + notFound.map(k => friendly[k]).join(', ')
+      + '. Please check your Excel file headers.');
+    btn.disabled = false; btn.textContent = '⚙️ Apply Commission Rules';
+    return;
+  }
+
+  // ── Prepare progress
+  const totalRows = aoa.length - 1;  // exclude header
+  showProgress('Processing rows…');
+
+  // ── Process rows
+  let updatedCount = 0;
+  let skippedCount = 0;
+  const matchedDepts = new Set();
+  const logRows = [];
+
+  for (let r = 1; r <= totalRows; r++) {
+    // Update progress bar every 50 rows (avoid UI freeze)
+    if (r % 50 === 0 || r === totalRows) {
+      setProgress(Math.round((r / totalRows) * 100));
+      await yieldToUI();
+    }
+
+    const row  = aoa[r];
+    const dept = String(row[colIdx.department] || '').trim();
+
+    if (!dept) { skippedCount++; continue; } // blank department – skip
+
+    const deptNorm  = dept.toLowerCase();
+    const ruleEntry = rules.get(deptNorm);
+
+    if (!ruleEntry) { skippedCount++; continue; } // dept not in rules – ignore
+
+    // ── Get bill price
+    const billPrice = parseFloat(row[colIdx.billPrice]);
+    if (isNaN(billPrice) || billPrice === 0) {
+      // Cannot calculate – skip this row safely
+      skippedCount++;
+      continue;
+    }
+
+    const { value } = ruleEntry;
+    let commissionPrice, commissionPct;
+
+    if (currentMode === 'percent') {
+      // Case 1: user gave %  →  calculate price
+      commissionPct   = value;
+      commissionPrice = (billPrice * commissionPct) / 100;
+    } else {
+      // Case 2: user gave price  →  calculate %
+      commissionPrice = value;
+      commissionPct   = (commissionPrice / billPrice) * 100;
+    }
+
+    // Round to 2 decimal places
+    commissionPrice = Math.round(commissionPrice * 100) / 100;
+    commissionPct   = Math.round(commissionPct   * 100) / 100;
+
+    // ── Update the worksheet cells directly
+    const commPriceCellAddr = XLSX.utils.encode_cell({ r, c: colIdx.commissionPrice });
+    const commPctCellAddr   = XLSX.utils.encode_cell({ r, c: colIdx.commissionPct   });
+
+    // Preserve cell style, only change value
+    const cpCell = ws[commPriceCellAddr] || {};
+    const cqCell = ws[commPctCellAddr]   || {};
+
+    ws[commPriceCellAddr] = { ...cpCell, t: 'n', v: commissionPrice,
+      w: commissionPrice.toFixed(2) };
+    ws[commPctCellAddr]   = { ...cqCell, t: 'n', v: commissionPct,
+      w: commissionPct.toFixed(2) };
+
+    updatedCount++;
+    matchedDepts.add(dept);
+
+    // Log (cap at 100)
+    if (logRows.length < 100) {
+      const testName = colIdx.testName !== undefined
+        ? String(row[colIdx.testName] || '') : '—';
+      logRows.push({ r, testName, dept, billPrice, commissionPrice, commissionPct,
+        mode: currentMode === 'percent' ? `${value}% → Price` : `Price → ${commissionPct}%` });
+    }
+  }
+
+  hideProgress();
+
+  if (updatedCount === 0) {
+    showProcessError('No rows were updated. Check that department names in the Excel match '
+      + 'your rules, and that bill prices are not zero or blank.');
+    btn.disabled = false; btn.textContent = '⚙️ Apply Commission Rules';
+    return;
+  }
+
+  // ── Store processed workbook
+  processedWorkbook = workbook;
+
+  // ── Show stats
+  document.getElementById('statTotal').textContent   = totalRows;
+  document.getElementById('statUpdated').textContent  = updatedCount;
+  document.getElementById('statSkipped').textContent  = skippedCount;
+  document.getElementById('statDepts').textContent    = matchedDepts.size;
+  document.getElementById('statsBar').classList.add('visible');
+
+  // ── Show log
+  renderLog(logRows);
+
+  // ── Enable download
+  document.getElementById('downloadBtn').disabled = false;
+
+  // ── Success message
+  showSuccess(`✅ Processing complete! <strong>${updatedCount} rows updated</strong> across `
+    + `<strong>${matchedDepts.size} department(s)</strong>. `
+    + `Click "Download Updated File" to save your Excel.`);
+
+  btn.disabled = false;
+  btn.textContent = '⚙️ Apply Commission Rules';
+}
+
+/* ================================================================
+   DOWNLOAD
+================================================================ */
+function downloadFile() {
+  if (!processedWorkbook) {
+    showProcessError('Please process the file first.');
+    return;
+  }
+  try {
+    XLSX.writeFile(processedWorkbook, 'Updated_Commission_File.xlsx');
+  } catch(err) {
+    showProcessError('Download failed: ' + err.message);
+  }
+}
+
+/* ================================================================
+   CALCULATION LOG TABLE
+================================================================ */
+function renderLog(rows) {
+  const tbody = document.getElementById('logBody');
+  tbody.innerHTML = '';
+
+  rows.forEach((row, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${i + 1}</td>
+      <td>${escHtml(row.testName) || '—'}</td>
+      <td class="td-dept">${escHtml(row.dept)}</td>
+      <td class="td-price">${row.billPrice.toFixed(2)}</td>
+      <td class="td-calc">${row.commissionPrice.toFixed(2)}</td>
+      <td class="td-calc">${row.commissionPct.toFixed(2)}%</td>
+      <td class="td-mode">${escHtml(row.mode)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('logSection').classList.add('visible');
+  document.getElementById('logSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ================================================================
+   UI HELPERS
+================================================================ */
+function showUploadError(msg) {
+  const el = document.getElementById('uploadError');
+  document.getElementById('uploadErrorMsg').textContent = msg;
+  el.classList.add('visible');
+}
+function clearUploadError() {
+  document.getElementById('uploadError').classList.remove('visible');
+}
+function showProcessError(msg) {
+  const el = document.getElementById('processError');
+  document.getElementById('processErrorMsg').innerHTML = msg;
+  el.classList.add('visible');
+}
+function hideProcessError() {
+  document.getElementById('processError').classList.remove('visible');
+}
+function showSuccess(msg) {
+  const el = document.getElementById('successMsg');
+  document.getElementById('successText').innerHTML = msg;
+  el.classList.add('visible');
+}
+function hideSuccess() {
+  document.getElementById('successMsg').classList.remove('visible');
+}
+function showProgress(label) {
+  document.getElementById('progressLabel').textContent = label;
+  document.getElementById('progressWrap').classList.add('visible');
+  setProgress(0);
+}
+function hideProgress() {
+  document.getElementById('progressWrap').classList.remove('visible');
+}
+function setProgress(pct) {
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = `Processing rows… ${pct}%`;
+}
+
+/* Yield control back to browser so UI can repaint */
+function yieldToUI() {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+/* ================================================================
+   INITIALISE – add 4 default rule rows
+================================================================ */
+(function init() {
+  const defaults = [
+    { dept: 'HAEMATOLOGY',           val: 25 },
+    { dept: 'BIOCHEMISTRY',          val: 30 },
+    { dept: 'SEROLOGY & IMMUNOLOGY', val: 20 },
+    { dept: 'SPECIAL TEST',          val: 15 },
+  ];
+  defaults.forEach(d => addRuleRow(d.dept, d.val));
+})();
+</script>
+</body>
+</html>
